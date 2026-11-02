@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Truth Coupons — coupon finder for The Whole Truth",
+  "short_name": "Truth Coupons",
+  "version": "0.1.0",
+  "description": "Finds every live coupon for thewholetruthfoods.com, tests each one on your cart and keeps the one that saves the most.",
+  "permissions": ["storage"],
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "content_scripts": [
+    {
+      "matches": ["https://thewholetruthfoods.com/*", "https://www.thewholetruthfoods.com/*"],
+      "js": ["lib.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
