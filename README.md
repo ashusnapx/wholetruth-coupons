@@ -38,17 +38,29 @@ The panel shows each code's conditions before you test it, so you can see why a 
 | **Terms & eligible products** | The store's full T&C text for the code |
 | `Last checked 2 Nov: …` | The last result this code got on your cart. It is kept in your browser, like the "last worked" note on coupon sites |
 
-Conditions for the store's own codes come from the store. Conditions for community codes come from `codes.json`, and are only what the person who added them reported.
+Conditions for the store's own codes come from the store. Conditions for community codes come from `codes.json`, and are only what the coupon site or the person who added them reported.
 
 ## Where the codes come from
 
 | Source | What it is | Updated by |
 | --- | --- | --- |
 | **Site** | The store's own list of active coupons, plus any offers on the items in your cart | The Whole Truth |
-| **Community** | [`codes.json`](codes.json) in this repo, fetched live every time you open the site | Anyone, by pull request |
+| **Community** | [`codes.json`](codes.json) in this repo, fetched live every time you open the site | A daily GitHub Action, plus anyone by pull request |
 | **Yours** | Codes you type into the panel, for example from an Instagram or YouTube creator | You (saved in your browser only) |
 
 Codes listed on more than one source are only tested once.
+
+### The daily update
+
+Every day at 06:00 IST, the [Update codes](.github/workflows/update-codes.yml) workflow runs [`scripts/update-codes.js`](scripts/update-codes.js). The script reads The Whole Truth page on nine coupon sites:
+
+GrabOn · Coupona · CouponNxt · AskMeOffers · Couponzania · couponcodes.asia · CouponAlexa · CouponTerra · GreenPromoCode
+
+It collects every code listed there, along with the discount and minimum order when the site gives them, and commits `codes.json` if anything changed. Codes added this way are marked `"auto": true` and record the date a site last listed them in `seen`. A code that no site has listed for 30 days is removed. Codes added by hand never are.
+
+The script fetches one page per site per day, identifies itself in its user agent, and only reads pages that the sites' `robots.txt` allows. Sites that load their codes with JavaScript (DealDrop, DesiDime) or block automated requests (Wethrift, Knoji, CouponBirds) are not used.
+
+To run it now: **Actions → Update codes → Run workflow**, or locally with `node scripts/update-codes.js`.
 
 ## How it works
 
@@ -131,6 +143,8 @@ No build step. The files are loaded as they are:
 | [`content.js`](content.js) | Fetches the codes, tests them through the store's API, draws the panel in a shadow DOM |
 | [`lib.js`](lib.js) | Pure helpers: merging code lists, picking the best result, turning the store's coupon rules into short terms |
 | [`codes.json`](codes.json) | Community code list |
+| [`scripts/update-codes.js`](scripts/update-codes.js) | Daily scraper that refreshes `codes.json` from coupon sites |
+| [`.github/workflows/update-codes.yml`](.github/workflows/update-codes.yml) | Runs the scraper every day and commits the result |
 | [`test.js`](test.js) | `node test.js` |
 
 After you edit a file, reload the extension in `chrome://extensions`, then refresh the site.

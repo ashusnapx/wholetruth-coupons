@@ -1,0 +1,26 @@
+name: Update codes
+
+on:
+  schedule:
+    - cron: '30 0 * * *' # every day at 06:00 IST
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: update-codes
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node test.js
+      - run: node scripts/update-codes.js
+      - name: Commit codes.json if it changed
+        run: |
+          git diff --quiet codes.json && exit 0
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "chore: update codes.json from coupon sites" codes.json
+          git push
