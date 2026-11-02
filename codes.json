@@ -1,5 +1,12 @@
 [
   { "code": "FUDGINGAWESOME", "note": "Listed on coupon sites", "terms": ["10% off (reported)"] },
   { "code": "SAJIDA20", "note": "Listed on coupon sites", "terms": ["20% off (reported)"] },
-  { "code": "WHOLESALE30", "note": "Listed on coupon sites", "terms": ["30% off (reported)"] }
+  { "code": "WHOLESALE30", "note": "Listed on coupon sites", "terms": ["30% off (reported)"] },
+  { "code": "AM20", "note": "Listed on coupon sites, inactive on 2 Nov 2026", "terms": ["20% off (reported)"] },
+  { "code": "CLEANLABEL", "note": "Listed on coupon sites, inactive on 2 Nov 2026", "terms": ["15% off (reported)"] },
+  { "code": "CLEANEST", "note": "Listed on coupon sites, inactive on 2 Nov 2026" },
+  { "code": "MADHU20", "note": "Creator code, inactive on 2 Nov 2026", "terms": ["20% off (reported)"], "min": 1000 },
+  { "code": "ARYAN20", "note": "Creator code, inactive on 2 Nov 2026", "terms": ["20% off (reported)"] },
+  { "code": "TANIMA20", "note": "Creator code, inactive on 2 Nov 2026", "terms": ["20% off (reported)"] },
+  { "code": "AJAY20", "note": "Creator code, inactive on 2 Nov 2026", "terms": ["20% off (reported)"] }
 ]
