@@ -21,6 +21,32 @@ assert.strictEqual(
   'C',
 );
 
+assert.deepStrictEqual(WTF.terms(null), []);
+assert.deepStrictEqual(
+  WTF.terms({
+    type: 'PERCENTAGE',
+    get_percent: 15,
+    min_order_value: 999,
+    applies_on: 'MRP',
+    product_categories: [{ name: 'Protein Bars' }],
+    applicable_payment_mode: 'ONLINE',
+    only_for_new_customer: true,
+    usage_limit_per_customer_type: 'ONLY_ONCE',
+  }),
+  ['15% off', 'Min order ₹999 (on MRP)', 'Only on Protein Bars', 'Prepaid orders only', 'New customers only', 'Once per customer'],
+);
+assert.deepStrictEqual(WTF.terms({ type: 'GRANULAR', applicable_payment_mode: 'ALL' }), ['Only on specific products']);
+assert.deepStrictEqual(WTF.terms({ type: 'FIXED', get_flat_discount: 100, product_variants: [{ product: { title: 'A' } }, { title: 'B' }, { title: 'C' }, { title: 'D' }] }), [
+  'Flat ₹100 off',
+  'Only on A, B, C +1 more',
+]);
+assert.match(WTF.terms({ ends_at: '2026-12-15T12:00:00Z' })[0], /^Valid till 15 Dec 2026$/);
+
+assert.strictEqual(WTF.shortfall(999, 804.5), 195);
+assert.strictEqual(WTF.shortfall(999, 1200), 0);
+assert.strictEqual(WTF.shortfall(0, 100), 0);
+assert.strictEqual(WTF.shortfall(500, undefined), 500);
+
 assert.strictEqual(WTF.readJSON('{"token":"x"}').token, 'x');
 assert.strictEqual(WTF.readJSON('not json'), null);
 assert.strictEqual(WTF.readJSON(null), null);

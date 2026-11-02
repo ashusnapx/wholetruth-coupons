@@ -19,19 +19,41 @@ async function api(path, body) {
   return res.json().catch(() => ({}));
 }
 
+const savedCart = () => WTF.readJSON(localStorage.getItem('cart'))?.cart;
+
 function cartId() {
-  return WTF.readJSON(localStorage.getItem('cart'))?.cart?.id || document.cookie.match(/_medusa_cart_id=([^;]+)/)?.[1];
+  return savedCart()?.id || document.cookie.match(/_medusa_cart_id=([^;]+)/)?.[1];
+}
+
+function fromRule(code, r, note) {
+  const specific = r?.type === 'GRANULAR' || r?.product_categories?.length || r?.product_variants?.length;
+  return {
+    code,
+    source: 'site',
+    note: r?.derived_description || r?.description || r?.title || note || '',
+    terms: WTF.terms(r),
+    tnc: Array.isArray(r?.terms_and_conditions) ? r.terms_and_conditions : [],
+    // MRP-based minimums are checked against the cart's MRP total, which the saved cart doesn't carry.
+    min: r?.applies_on === 'MRP' ? 0 : r?.min_order_value,
+    // The site's own page listing the products a product-specific code works on.
+    link: specific ? `/coupons/${encodeURIComponent(code)}` : '',
+  };
 }
 
 async function loadCodes() {
-  const items = WTF.readJSON(localStorage.getItem('cart'))?.cart?.items || [];
+  const items = savedCart()?.items || [];
   const [site, offers, community, mine] = await Promise.all([
     api('/coupons/active')
-      .then((j) => (j.data?.priceRules || []).map((r) => ({ code: r.discount_code, note: r.title || r.description || '', source: 'site' })))
+      .then((j) => (j.data?.priceRules || []).map((r) => fromRule(r.discount_code, r)))
       .catch(() => []),
     items.length
       ? api(`/discounts/offers-on-product?${items.map((i) => `variant_id=${encodeURIComponent(i.variant_id)}`).join('&')}`)
-          .then((j) => Object.values(j.data?.offers || {}).flat().map((o) => ({ code: o.code, note: 'offer on an item in your cart', source: 'site' })))
+          .then((j) => {
+            const rules = new Map((j.data?.priceRules || []).map((r) => [r.id, r]));
+            return Object.values(j.data?.offers || {})
+              .flat()
+              .map((o) => fromRule(o.code, rules.get(o.priceRuleId), 'Offer on an item in your cart'));
+          })
           .catch(() => [])
       : [],
     fetch(COMMUNITY)
@@ -113,14 +135,22 @@ root.innerHTML = `
   .status { margin: 0; padding: 10px 16px; font-size: 13px; background: #f1ecdc; }
   .status.win { background: #d9f2df; font-weight: 600; }
   .status.err { background: #fde2e1; }
-  ul { list-style: none; margin: 0; padding: 4px 0; overflow: auto; flex: 1; }
-  li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 8px 16px; border-bottom: 1px solid #eee6d3; font-size: 13px; }
-  li code { font-family: ui-monospace, Menlo, monospace; font-weight: 700; letter-spacing: .02em; }
-  li small { grid-column: 1; color: #5c6b62; font-size: 12px; }
-  li .res { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-size: 12px; text-align: right; max-width: 150px; }
-  li.ok .res { color: #157a3a; font-weight: 700; }
-  li.no .res { color: #9a3b33; }
-  li.best { background: #fff4c2; }
+  .codes { list-style: none; margin: 0; padding: 4px 0; overflow: auto; flex: 1; }
+  .codes > li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 8px 16px; border-bottom: 1px solid #eee6d3; font-size: 13px; }
+  .codes > li > code { font-family: ui-monospace, Menlo, monospace; font-weight: 700; letter-spacing: .02em; }
+  .codes > li > small { grid-column: 1; color: #5c6b62; font-size: 12px; }
+  .res { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-size: 12px; text-align: right; max-width: 150px; }
+  .codes > li.ok .res { color: #157a3a; font-weight: 700; }
+  .codes > li.no .res { color: #9a3b33; }
+  .codes > li.best { background: #fff4c2; }
+  .meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .chip { padding: 2px 8px; border-radius: 999px; background: #efe9d8; font-size: 11px; }
+  .chip.need { background: #ffe0a3; font-weight: 600; }
+  .last { grid-column: 1 / -1; margin: 2px 0 0; font-size: 11px; color: #5c6b62; }
+  details { grid-column: 1 / -1; margin-top: 4px; font-size: 12px; }
+  summary { cursor: pointer; color: #2f5d44; }
+  details ul { margin: 4px 0; padding-left: 18px; color: #3d4a42; }
+  details a { color: #2f5d44; }
   form { display: flex; gap: 8px; padding: 10px 16px 0; }
   input { flex: 1; padding: 8px 10px; border: 1px solid #d8d0bb; border-radius: 8px; font-size: 13px; text-transform: uppercase; }
   form button { padding: 8px 12px; border: 1px solid #14231b; border-radius: 8px; background: #fff; cursor: pointer; font-size: 13px; }
@@ -133,7 +163,7 @@ root.innerHTML = `
 <section class="panel" hidden aria-label="Coupon finder">
   <header><h2>Truth Coupons</h2><button class="x" aria-label="Close">×</button></header>
   <p class="status" role="status">Fetching coupons…</p>
-  <ul></ul>
+  <ul class="codes"></ul>
   <form><input placeholder="Add a code you found" aria-label="Coupon code"><button>Add</button></form>
   <button class="go">Try all &amp; apply the best</button>
 </section>`;
@@ -143,29 +173,53 @@ const $ = (s) => root.querySelector(s);
 const fab = $('.fab');
 const panel = $('.panel');
 const msg = $('.status');
-const list = $('ul');
+const list = $('.codes');
 const go = $('.go');
 let codes = [];
+let seen = {}; // last result per code, like a personal "last worked" history
 
 const say = (text, kind = '') => {
   msg.textContent = text;
   msg.className = `status ${kind}`;
 };
 
+const el = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls, textContent: text });
+const day = (t) => new Date(t).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+
 function row(c) {
-  let li = [...list.children].find((el) => el.dataset.code === c.code.toUpperCase());
-  if (!li) {
-    li = document.createElement('li');
-    li.dataset.code = c.code.toUpperCase();
-    li.innerHTML = '<code></code><span class="res"></span><small></small>';
-    li.querySelector('code').textContent = c.code;
-    li.querySelector('small').textContent = [c.note, c.source].filter(Boolean).join(' · ');
-    list.append(li);
+  const key = c.code.toUpperCase();
+  let li = [...list.children].find((x) => x.dataset.code === key);
+  if (li) return li;
+  li = el('li', '', '');
+  li.dataset.code = key;
+  li.append(el('code', '', c.code), el('span', 'res', ''), el('small', '', [c.note, c.source].filter(Boolean).join(' · ')));
+
+  const cart = savedCart();
+  const need = WTF.shortfall(c.min, cart?.item_subtotal ?? cart?.total);
+  const chips = [...(need ? [`Add ₹${need} more to unlock`] : []), ...(c.terms || [])];
+  if (chips.length) {
+    const meta = el('div', 'meta', '');
+    meta.append(...chips.map((t, i) => el('span', need && !i ? 'chip need' : 'chip', t)));
+    li.append(meta);
   }
+
+  const last = seen[key];
+  if (last) li.append(el('p', 'last', `Last checked ${day(last.at)}: ${last.ok ? `worked, ₹${last.discount} off` : last.message}`));
+
+  if (c.tnc?.length || c.link) {
+    const details = el('details', '', '');
+    const tnc = el('ul', '', '');
+    tnc.append(...(c.tnc || []).map((t) => el('li', '', t)));
+    details.append(el('summary', '', 'Terms & eligible products'), tnc);
+    if (c.link) details.append(Object.assign(el('a', '', 'See the products this code works on ↗'), { href: c.link, target: '_blank', rel: 'noopener' }));
+    li.append(details);
+  }
+  list.append(li);
   return li;
 }
 
 async function refresh() {
+  ({ seen = {} } = await chrome.storage.local.get('seen'));
   codes = await loadCodes();
   list.textContent = '';
   codes.forEach(row);
@@ -191,7 +245,7 @@ $('form').onsubmit = async (e) => {
 
 go.onclick = async () => {
   go.disabled = true;
-  list.querySelectorAll('li').forEach((li) => {
+  list.querySelectorAll(':scope > li').forEach((li) => {
     li.className = '';
     li.querySelector('.res').textContent = '';
   });
@@ -201,8 +255,11 @@ go.onclick = async () => {
       const li = row(c);
       li.className = r.ok ? 'ok' : 'no';
       li.querySelector('.res').textContent = r.ok ? `✅ ₹${r.discount} off` : `❌ ${r.message}`;
+      li.querySelector('.last')?.remove();
+      seen[r.code.toUpperCase()] = { ok: r.ok, discount: r.discount, message: r.message, at: Date.now() };
       say(`Testing ${++n} of ${codes.length}…`);
     });
+    await chrome.storage.local.set({ seen });
     if (best) {
       row(best).classList.add('best');
       say(`Applied ${best.code}: you save ₹${best.discount}. Tested ${tested} codes. Reloading cart…`, 'win');
