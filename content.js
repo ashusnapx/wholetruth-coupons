@@ -24,23 +24,44 @@ function cartId() {
 }
 
 async function loadCodes() {
-  const [site, community, mine] = await Promise.all([
+  const items = WTF.readJSON(localStorage.getItem('cart'))?.cart?.items || [];
+  const [site, offers, community, mine] = await Promise.all([
     api('/coupons/active')
       .then((j) => (j.data?.priceRules || []).map((r) => ({ code: r.discount_code, note: r.title || r.description || '', source: 'site' })))
       .catch(() => []),
+    items.length
+      ? api(`/discounts/offers-on-product?${items.map((i) => `variant_id=${encodeURIComponent(i.variant_id)}`).join('&')}`)
+          .then((j) => Object.values(j.data?.offers || {}).flat().map((o) => ({ code: o.code, note: 'offer on an item in your cart', source: 'site' })))
+          .catch(() => [])
+      : [],
     fetch(COMMUNITY)
       .then((r) => r.json())
       .then((list) => list.map((c) => ({ ...c, source: 'community' })))
       .catch(() => []),
     chrome.storage.local.get('mine').then((s) => (s.mine || []).map((code) => ({ code, source: 'yours' }))),
   ]);
-  return WTF.merge(site, community, mine);
+  return WTF.merge(site, offers, community, mine);
 }
 
+let lastCart;
+async function discount(action, code, id) {
+  const j = await api(`/discounts/${action}`, { code, cart_id: id });
+  if (j.data?.cart) lastCart = j.data.cart;
+  return j;
+}
+
+const remove = (code, id) => discount('remove', code, id);
+
 async function apply(code, id) {
-  const j = await api('/discounts/apply', { code, cart_id: id });
+  const j = await discount('apply', code, id);
   const d = j.data?.discountResult;
   return { code, ok: !!d?.isApplied, discount: Number(d?.discount) || 0, message: d?.message || j.message || 'Not applicable' };
+}
+
+// The site rebuilds its cart drawer from this redux-persist copy on load, not from the server.
+function saveCart() {
+  const saved = WTF.readJSON(localStorage.getItem('cart'));
+  if (saved?.cart && lastCart) localStorage.setItem('cart', JSON.stringify({ ...saved, cart: lastCart }));
 }
 
 // Each code is tested on a clean cart (the site refuses a code when a bigger one is already on), then the best one is put back.
@@ -52,7 +73,7 @@ async function tryAll(codes, onResult) {
   let current = original;
   const results = [];
   for (const c of WTF.merge(original ? [{ code: original, source: 'applied' }] : [], codes)) {
-    if (current) await api('/discounts/remove', { code: current, cart_id: id });
+    if (current) await remove(current, id);
     const r = await apply(c.code, id);
     current = r.ok ? c.code : null;
     results.push(r);
@@ -61,12 +82,13 @@ async function tryAll(codes, onResult) {
   const best = WTF.best(results);
   const keep = best?.code || original;
   if (keep && keep !== current) {
-    if (current) await api('/discounts/remove', { code: current, cart_id: id });
+    if (current) await remove(current, id);
     await apply(keep, id);
   } else if (!keep && current) {
-    await api('/discounts/remove', { code: current, cart_id: id });
+    await remove(current, id);
   }
-  return { best, total: cart.total, tested: results.length };
+  saveCart();
+  return { best, tested: results.length };
 }
 
 // ---------- UI ----------
